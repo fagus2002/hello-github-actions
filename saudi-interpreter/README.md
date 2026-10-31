@@ -23,7 +23,13 @@ python3 -m http.server 8000
 # 브라우저에서 http://localhost:8000 열기
 ```
 
-GitHub Pages에 올리면 휴대폰에서도 바로 쓸 수 있습니다.
+### GitHub Pages 배포
+
+`.github/workflows/pages.yml` 워크플로가 `main` 브랜치의 `saudi-interpreter/` 폴더를 GitHub Pages에 자동으로 배포합니다.
+
+1. 저장소의 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 바꿉니다. 처음 한 번만 하면 됩니다.
+2. `main`에 이 폴더의 변경 사항이 푸시되면 자동으로 배포됩니다. **Actions** 탭에서 직접 실행(Run workflow)할 수도 있습니다.
+3. 배포가 끝나면 `https://<사용자명>.github.io/<저장소명>/`에서 열립니다. 휴대폰에서도 바로 쓸 수 있습니다.
 
 처음 열면 ⚙ 설정에 [Anthropic API 키](https://console.anthropic.com/)를 넣으세요. 키는 이 브라우저의 localStorage에만 저장되고 `api.anthropic.com`으로만 전송됩니다. 개인용으로 쓰는 앱이니 키가 들어간 상태로 다른 사람과 기기를 같이 쓰지 마세요.
 
