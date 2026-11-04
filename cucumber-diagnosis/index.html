@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--APP-START-->
+<title>오이 양액재배 진단</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: 왼쪽은 측정값 입력 장부(野帳), 오른쪽은 고정된 진단 판정표. 폰에서는 한 열 + 하단 점수 바 */
+:root {
+  --bg: #f3f5ef;
+  --surface: #ffffff;
+  --ink: #1d2a1f;
+  --muted: #5d6b5f;
+  --line: #d8dfd3;
+  --accent: #2f6b3a;      /* 오이 껍질 녹색 */
+  --accent-soft: #e2eedf;
+  --good: #2e7d4f;
+  --good-bg: #e3f2e8;
+  --warn: #a8670a;
+  --warn-bg: #fbf0dc;
+  --bad: #b3362b;
+  --bad-bg: #fbe5e2;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121813; --surface: #1a221b; --ink: #e4ece3; --muted: #9aab9c; --line: #2d3a2f;
+    --accent: #7cc28a; --accent-soft: #223326;
+    --good: #6fcf93; --good-bg: #1c3226; --warn: #e8b04f; --warn-bg: #352a15; --bad: #f08578; --bad-bg: #3a1f1c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121813; --surface: #1a221b; --ink: #e4ece3; --muted: #9aab9c; --line: #2d3a2f;
+  --accent: #7cc28a; --accent-soft: #223326;
+  --good: #6fcf93; --good-bg: #1c3226; --warn: #e8b04f; --warn-bg: #352a15; --bad: #f08578; --bad-bg: #3a1f1c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 96px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 20px; }
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; border-bottom: 2px solid var(--ink); padding-bottom: 12px; }
+header.top h1 { margin: 0; font-size: 1.7rem; letter-spacing: -0.02em; text-wrap: balance; }
+header.top p { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; }
+.badge-sample { font-size: 0.78rem; background: var(--warn-bg); color: var(--warn); padding: 3px 10px; border-radius: 99px; font-weight: 600; }
+.grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 880px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+section.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px 18px; }
+section.card > h2 { margin: 0 0 4px; font-size: 1.02rem; display: flex; align-items: baseline; gap: 8px; }
+section.card > h2 small { font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+.hint { color: var(--muted); font-size: 0.82rem; margin: 0 0 12px; }
+
+.setup { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .setup { grid-template-columns: minmax(0, 1fr); } }
+.seg { display: grid; gap: 4px; }
+.seg > span { font-size: 0.78rem; color: var(--muted); letter-spacing: 0.02em; }
+select, input[type="number"] {
+  width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; min-height: 40px;
+}
+input[type="number"] { font-family: var(--font-data); font-variant-numeric: tabular-nums; text-align: right; }
+select:focus-visible, input:focus-visible, button:focus-visible, label.chk:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+@media (max-width: 480px) { .fields { grid-template-columns: minmax(0, 1fr); } }
+.field { display: grid; gap: 3px; }
+.field label { font-size: 0.86rem; font-weight: 500; display: flex; justify-content: space-between; gap: 6px; }
+.field label .tgt { color: var(--muted); font-weight: 400; font-family: var(--font-data); font-size: 0.74rem; white-space: nowrap; }
+.inwrap { position: relative; }
+.inwrap input { padding-right: 62px; }
+.inwrap .unit { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.78rem; pointer-events: none; }
+.field.st-good input { border-color: var(--good); }
+.field.st-warn input { border-color: var(--warn); background: var(--warn-bg); }
+.field.st-bad input { border-color: var(--bad); background: var(--bad-bg); }
+.derived { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.84rem; color: var(--muted); }
+.derived b { font-family: var(--font-data); color: var(--ink); }
+
+.symptoms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 560px) { .symptoms { grid-template-columns: minmax(0, 1fr); } }
+label.chk { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-size: 0.86rem; background: var(--bg); }
+label.chk input { margin-top: 3px; accent-color: var(--accent); }
+label.chk:has(input:checked) { border-color: var(--bad); background: var(--bad-bg); }
+label.chk small { display: block; color: var(--muted); font-size: 0.76rem; }
+
+/* 결과 패널 */
+aside.result { position: sticky; top: 12px; display: grid; gap: 14px; }
+@media (max-width: 880px) { aside.result { position: static; } }
+.scorebox { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: center; }
+.ring { width: 112px; height: 112px; position: relative; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring .num { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; font-family: var(--font-data); font-size: 1.9rem; font-weight: 700; line-height: 1; }
+.ring .num small { display: block; font-size: 0.7rem; color: var(--muted); font-weight: 500; margin-top: 4px; font-family: var(--font-body); }
+.grade { font-size: 1.35rem; font-weight: 700; margin: 0; }
+.verdict { margin: 4px 0 10px; color: var(--muted); font-size: 0.88rem; }
+.cats { display: grid; gap: 6px; }
+.cat { display: grid; grid-template-columns: 4.5em minmax(0, 1fr) 2.6em; align-items: center; gap: 8px; font-size: 0.8rem; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
+.cat b { font-family: var(--font-data); text-align: right; font-weight: 500; }
+.counts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.pill { font-size: 0.75rem; padding: 2px 9px; border-radius: 99px; font-weight: 600; }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+
+.issues { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.issues h3, .history h3 { margin: 0 0 10px; font-size: 0.98rem; }
+.issue { display: grid; grid-template-columns: 6px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.issue:first-of-type { border-top: 0; padding-top: 0; }
+.issue .stripe { border-radius: 3px; }
+.issue.bad .stripe { background: var(--bad); }
+.issue.warn .stripe { background: var(--warn); }
+.issue.good .stripe { background: var(--good); }
+.issue h4 { margin: 0; font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.issue h4 code { font-family: var(--font-data); font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+.issue p { margin: 3px 0 0; font-size: 0.84rem; }
+.issue p.act { color: var(--ink); }
+.issue p.act::before { content: "조치 · "; color: var(--accent); font-weight: 700; }
+.issue p.why { color: var(--muted); }
+details.oklist summary { cursor: pointer; font-size: 0.84rem; color: var(--muted); margin-top: 8px; }
+details.oklist ul { margin: 6px 0 0; padding-left: 18px; font-size: 0.82rem; color: var(--muted); }
+.empty { color: var(--muted); font-size: 0.86rem; margin: 0; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+button { font: inherit; font-size: 0.88rem; font-weight: 600; border-radius: 8px; padding: 9px 14px; cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); }
+button.ghost { background: transparent; color: var(--accent); }
+button:hover { filter: brightness(1.08); }
+.toast { font-size: 0.82rem; color: var(--good); min-height: 1.2em; }
+
+.history { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; font-size: 0.76rem; letter-spacing: 0.03em; }
+td.n { font-family: var(--font-data); text-align: right; }
+td button { padding: 2px 8px; font-size: 0.75rem; }
+
+.ref { font-size: 0.8rem; color: var(--muted); }
+.ref table td, .ref table th { padding: 4px 6px; }
+
+.mobilebar { display: none; }
+@media (max-width: 880px) {
+  .mobilebar {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--surface); border-top: 1px solid var(--line);
+    padding-top: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .mobilebar b { font-family: var(--font-data); font-size: 1.2rem; }
+  .mobilebar a { color: var(--accent); font-weight: 600; text-decoration: none; font-size: 0.9rem; }
+}
+@media (prefers-reduced-motion: reduce) { .bar i, .ring circle { transition: none !important; } }
+</style>
+<!--HEAD-END-->
+</head>
+<body>
+<!--BODY-START-->
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>오이 양액재배 진단</h1>
+      <p>급액·배액·환경·생육 측정값을 넣으면 기준 범위와 비교해 재배 상태를 판정하고 조치를 알려줍니다.</p>
+    </div>
+    <span class="badge-sample" id="sampleBadge">예시 값이 입력되어 있습니다</span>
+  </header>
+
+  <div class="grid">
+    <form id="form" autocomplete="off">
+      <div style="display:grid; gap:14px;">
+        <section class="card">
+          <h2>재배 조건</h2>
+          <p class="hint">생육 단계·계절·재배 방식에 따라 기준 범위가 달라집니다.</p>
+          <div class="setup">
+            <label class="seg"><span>생육 단계</span>
+              <select id="stage">
+                <option value="nursery">육묘기 (본엽 4~5매)</option>
+                <option value="early">정식~착과 초기</option>
+                <option value="harvest" selected>수확기</option>
+              </select>
+            </label>
+            <label class="seg"><span>계절</span>
+              <select id="season">
+                <option value="summer">여름 (고온·강광)</option>
+                <option value="spring" selected>봄·가을</option>
+                <option value="winter">겨울 (저온·약광)</option>
+              </select>
+            </label>
+            <label class="seg"><span>재배 방식</span>
+              <select id="system">
+                <option value="rockwool" selected>암면 (비순환)</option>
+                <option value="coir">코이어 (비순환)</option>
+                <option value="nft">NFT (순환식)</option>
+                <option value="dft">담액식 DFT (순환식)</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>급액 양액 <small>공급하는 양액</small></h2>
+          <p class="hint">점적 끝단 또는 양액 탱크에서 측정한 값.</p>
+          <div class="fields" id="g-supply"></div>
+        </section>
+
+        <section class="card" id="drainCard">
+          <h2>배액 · 근권 <small>슬래브에서 나오는 물</small></h2>
+          <p class="hint" id="drainHint">하루 누적 급액량과 배액량으로 배액률을 계산합니다.</p>
+          <div class="fields" id="g-drain"></div>
+        </section>
+
+        <section class="card">
+          <h2>온실 환경 <small>주간 평균 기준</small></h2>
+          <p class="hint">온습도로 수증기압차(VPD)를 자동 계산합니다.</p>
+          <div class="fields" id="g-env"></div>
+        </section>
+
+        <section class="card">
+          <h2>생육 조사 <small>대표 10주 평균</small></h2>
+          <p class="hint">줄기 굵기는 생장점 아래 15cm 지점에서 잽니다. 비워 두면 판정에서 빠집니다.</p>
+          <div class="fields" id="g-growth"></div>
+        </section>
+
+        <section class="card">
+          <h2>관찰된 증상</h2>
+          <p class="hint">지금 보이는 증상을 모두 고르세요. 측정값과 함께 원인을 좁혀 줍니다.</p>
+          <div class="symptoms" id="symptoms"></div>
+        </section>
+
+        <section class="card ref">
+          <h2>현재 조건의 기준 범위</h2>
+          <p class="hint">국내 오이 시설 양액재배 일반 권장치를 단순화한 참고값입니다. 품종·배양액 처방에 맞게 조정하세요.</p>
+          <div class="tablewrap"><table id="refTable"></table></div>
+        </section>
+      </div>
+    </form>
+
+    <aside class="result" id="result">
+      <div class="scorebox">
+        <div class="ring" aria-hidden="true">
+          <svg viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="var(--line)" stroke-width="12"></circle>
+            <circle id="ringArc" cx="60" cy="60" r="52" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7" style="transition: stroke-dashoffset .4s"></circle>
+          </svg>
+          <div class="num"><div><span id="scoreNum">–</span><small>/ 100</small></div></div>
+        </div>
+        <div>
+          <p class="grade" id="grade">–</p>
+          <p class="verdict" id="verdict"></p>
+          <div class="cats" id="cats"></div>
+          <div class="counts" id="counts"></div>
+        </div>
+      </div>
+
+      <div class="issues">
+        <h3>우선 조치할 항목</h3>
+        <div id="issueList"></div>
+        <details class="oklist" id="okWrap"><summary id="okSummary"></summary><ul id="okList"></ul></details>
+      </div>
+
+      <div class="actions">
+        <button type="button" id="saveBtn">오늘 진단 기록하기</button>
+        <button type="button" class="ghost" id="copyBtn">진단 결과 복사</button>
+        <button type="button" class="ghost" id="clearBtn">입력 비우기</button>
+      </div>
+      <div class="toast" id="toast" role="status"></div>
+
+      <div class="history">
+        <h3>진단 기록</h3>
+        <p class="empty" id="histEmpty">아직 기록이 없습니다. ‘오늘 진단 기록하기’를 누르면 이 브라우저에 저장됩니다.</p>
+        <div class="tablewrap"><table id="histTable" hidden></table></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="mobilebar"><span>진단 점수 <b id="mScore">–</b> <span id="mGrade"></span></span><a href="#result">결과 보기 ↓</a></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- 기준 범위 ----------
+  // good: [min,max] 적정, warn: [min,max] 주의 허용폭 (그 밖은 위험)
+  function targets(stage, season, system) {
+    const recirc = system === "nft" || system === "dft";
+    const ecBase = { nursery: [1.5, 2.0], early: [2.0, 2.4], harvest: [2.2, 2.8] }[stage];
+    const ecShift = { summer: -0.3, spring: 0, winter: 0.3 }[season] - (recirc ? 0.2 : 0);
+    const ec = [round1(ecBase[0] + ecShift), round1(ecBase[1] + ecShift)];
+    const drainRatio = { summer: [25, 35], spring: [20, 30], winter: [15, 25] }[season];
+    const night = { nursery: [18, 20], early: [17, 19], harvest: [15, 18] }[stage];
+    const day = stage === "nursery" ? [25, 28] : [24, 28];
+    const water = { nursery: null, early: [1.0, 2.5], harvest: [2.0, 3.5] }[stage];
+    const growth = { nursery: null, early: [15, 30], harvest: [20, 35] }[stage];
+    return {
+      ec: { good: ec, warn: [round1(ec[0] - 0.4), round1(ec[1] + 0.4)] },
+      ph: { good: [5.5, 6.2], warn: [5.0, 6.8] },
+      solT: { good: [18, 22], warn: [15, 25] },
+      dO: { good: [7, 99], warn: [5, 99] },
+      drainEcDiff: { good: [0.2, 1.0], warn: [-0.3, 1.5] },
+      drainPh: { good: [5.5, 6.5], warn: [5.0, 7.0] },
+      drainRatio: { good: drainRatio, warn: [drainRatio[0] - 10, drainRatio[1] + 10] },
+      rootT: { good: [18, 22], warn: [16, 25] },
+      dayT: { good: day, warn: [day[0] - 3, day[1] + 3] },
+      nightT: { good: night, warn: [night[0] - 2, night[1] + 2] },
+      rh: { good: [70, 85], warn: [60, 90] },
+      vpd: { good: [0.5, 1.2], warn: [0.3, 1.6] },
+      co2: { good: [600, 1000], warn: [400, 1500] },
+      water: water && { good: water, warn: [water[0] * 0.7, water[1] * 1.3] },
+      growth: growth && { good: growth, warn: [growth[0] - 5, growth[1] + 8] },
+      stem: { good: [8, 12], warn: [7, 13] },
+      tankDays: { good: [0, 14], warn: [0, 21] },
+      recirc
+    };
+  }
+  function round1(x) { return Math.round(x * 10) / 10; }
+
+  // ---------- 입력 항목 ----------
+  const FIELDS = [
+    { id: "ec", g: "supply", cat: "양액", label: "급액 EC", unit: "dS/m", step: 0.1, sample: 2.6 },
+    { id: "ph", g: "supply", cat: "양액", label: "급액 pH", unit: "", step: 0.1, sample: 5.8 },
+    { id: "solT", g: "supply", cat: "양액", label: "양액 온도", unit: "°C", step: 0.5, sample: 19 },
+    { id: "dO", g: "supply", cat: "양액", label: "용존산소 DO", unit: "mg/L", step: 0.1, sample: "" },
+    { id: "drainEc", g: "drain", cat: "근권", label: "배액 EC", unit: "dS/m", step: 0.1, sample: 3.9, nonRecirc: true },
+    { id: "drainPh", g: "drain", cat: "근권", label: "배액 pH", unit: "", step: 0.1, sample: 6.4, nonRecirc: true },
+    { id: "supplyMl", g: "drain", cat: "근권", label: "1주당 하루 급액량", unit: "mL", step: 50, sample: 2400, nonRecirc: true },
+    { id: "drainMl", g: "drain", cat: "근권", label: "1주당 하루 배액량", unit: "mL", step: 50, sample: 360, nonRecirc: true },
+    { id: "rootT", g: "drain", cat: "근권", label: "근권(슬래브) 온도", unit: "°C", step: 0.5, sample: 20 },
+    { id: "tankDays", g: "drain", cat: "근권", label: "양액 전량 교체 후 경과일", unit: "일", step: 1, sample: "", recircOnly: true },
+    { id: "dayT", g: "env", cat: "환경", label: "주간 기온", unit: "°C", step: 0.5, sample: 27 },
+    { id: "nightT", g: "env", cat: "환경", label: "야간 기온", unit: "°C", step: 0.5, sample: 14 },
+    { id: "rh", g: "env", cat: "환경", label: "주간 상대습도", unit: "%", step: 1, sample: 72 },
+    { id: "co2", g: "env", cat: "환경", label: "주간 CO₂ 농도", unit: "ppm", step: 50, sample: 450 },
+    { id: "rad", g: "env", cat: "환경", label: "하루 누적 일사량", unit: "J/cm²", step: 50, sample: 1100 },
+    { id: "growth", g: "growth", cat: "생육", label: "주간 생장 길이", unit: "cm/주", step: 1, sample: 24 },
+    { id: "stem", g: "growth", cat: "생육", label: "줄기 굵기", unit: "mm", step: 0.1, sample: 9.5 },
+    { id: "fruitSet", g: "growth", cat: "생육", label: "1주당 착과 중인 과실 수", unit: "개", step: 1, sample: 3 }
+  ];
+
+  const SYMPTOMS = [
+    { id: "s_mg", cat: "양액", label: "아래 잎 엽맥 사이가 노랗게", sub: "엽맥은 녹색으로 남음", title: "마그네슘(Mg) 결핍 의심",
+      why: "과실 비대기에 Mg 요구가 커지고, K·Ca 과다나 근권 EC 과다가 흡수를 막습니다.",
+      act: "황산마그네슘 1~2% 엽면시비를 1주 간격 2~3회. 배양액 Mg 농도와 K:Mg 비율을 점검하세요.", w: 6 },
+    { id: "s_fe", cat: "양액", label: "새 잎이 노랗게, 엽맥만 녹색", sub: "생장점 부근 잎", title: "철(Fe) 결핍 의심",
+      why: "근권 pH가 6.5 이상이면 철 흡수가 급격히 떨어집니다. 저온·과습으로 뿌리 활력이 약해도 나타납니다.",
+      act: "배액 pH를 확인해 높으면 급액 pH를 5.5 쪽으로 낮추고, 킬레이트철(Fe-EDDHA 등)을 보강하세요.", w: 6 },
+    { id: "s_ca", cat: "환경", label: "새 잎 가장자리가 타거나 오그라듦", sub: "팁번, 컵 모양 잎", title: "칼슘(Ca) 결핍 · 증산 부족",
+      why: "Ca는 증산 흐름으로만 이동합니다. 습도가 높거나 근권 EC가 높으면 생장점까지 가지 못합니다.",
+      act: "야간 환기·순환팬으로 습도를 낮추고, 근권 EC를 낮추세요. 염화칼슘 0.3% 엽면시비가 응급책입니다.", w: 6 },
+    { id: "s_n", cat: "양액", label: "아래 잎부터 전체가 연녹색·황화", sub: "엽맥까지 고르게", title: "질소(N) 부족 의심",
+      why: "급액 EC가 낮거나 배액률이 너무 높아 양분이 씻겨 나가는 경우가 많습니다.",
+      act: "급액 EC를 0.2~0.3 올리고, 배액의 NO₃-N을 분석해 처방을 확인하세요.", w: 5 },
+    { id: "s_k", cat: "양액", label: "아래 잎 가장자리가 갈색으로 마름", sub: "엽록부터 안쪽으로", title: "칼륨(K) 결핍 또는 염류 장해",
+      why: "착과량이 많을 때 K 요구가 커집니다. 배액 EC가 매우 높다면 염류 장해일 가능성이 큽니다.",
+      act: "배액 EC가 높으면 배액률을 올려 슬래브를 세척하고, 낮으면 K 비율을 높인 처방으로 바꾸세요.", w: 5 },
+    { id: "s_wilt", cat: "근권", label: "한낮에 시들고 저녁에 회복", sub: "", title: "뿌리 흡수력 부족",
+      why: "근권 EC 과다, 산소 부족, 근권 고온, 뿌리 병해가 겹치면 증산을 따라가지 못합니다.",
+      act: "급액 횟수를 늘리고 첫 급액 시간을 앞당기세요. 근권 온도·DO·배액 EC를 함께 확인하세요.", w: 8 },
+    { id: "s_root", cat: "근권", label: "뿌리가 갈색이고 미끈거림", sub: "흰 뿌리가 적음", title: "뿌리썩음(피시움 등) 의심",
+      why: "양액 온도 25°C 이상, 용존산소 부족, 순환 양액 오염에서 잘 생깁니다.",
+      act: "병든 주는 제거하고, 순환식이면 양액을 교체·살균하세요. 양액 온도를 22°C 이하, DO를 7mg/L 이상으로 유지하세요.", w: 10 },
+    { id: "s_curve", cat: "생육", label: "굽은 과 · 꼭지 쪽이 가는 과", sub: "곡과, 첨두과", title: "초세 약화 · 착과 부담",
+      why: "착과 수가 많거나 광·온도가 부족해 동화산물이 모자라면 과실 모양이 나빠집니다.",
+      act: "기형과는 일찍 따내고 착과 수를 줄이세요. 야간 온도를 낮춰 호흡 소모를 줄이고 CO₂를 보충하세요.", w: 5 },
+    { id: "s_stop", cat: "생육", label: "생장점이 멈추고 마디가 짧아짐", sub: "순멎이, 꽃이 생장점에 몰림", title: "생식생장 과다 (순멎이)",
+      why: "과다 착과, 저온, 근권 EC 과다로 영양생장이 눌린 상태입니다.",
+      act: "아래 마디 과실을 적과하고, 급액 EC를 0.2~0.3 낮추세요. 야간 최저 기온을 15°C 이상 유지하세요.", w: 7 },
+    { id: "s_vigor", cat: "생육", label: "잎이 크고 얇으며 줄기가 굵음", sub: "꽃이 잘 안 달림", title: "영양생장 과다 (과번무)",
+      why: "EC가 낮거나 야간 온도가 높고 습도가 높으면 잎·줄기로만 양분이 갑니다.",
+      act: "급액 EC를 올리고 주야간 온도 차를 키우세요. 측지·잎 정리로 수광을 개선하세요.", w: 4 },
+    { id: "s_mildew", cat: "환경", label: "잎에 각진 노란 반점 또는 흰 가루", sub: "노균병·흰가루병", title: "잎 병해 (노균병 · 흰가루병)",
+      why: "노균병은 잎이 젖는 고습 조건에서, 흰가루병은 건조와 고습이 반복될 때 퍼집니다.",
+      act: "새벽 결로를 막도록 난방·환기를 조절하고, 발병 잎을 제거한 뒤 등록 약제로 방제하세요.", w: 6 }
+  ];
+
+  const $ = (s) => document.querySelector(s);
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  };
+
+  // ---------- 폼 생성 ----------
+  FIELDS.forEach((f) => {
+    const wrap = document.createElement("div");
+    wrap.className = "field";
+    wrap.id = "f-" + f.id;
+    wrap.innerHTML =
+      '<label for="' + f.id + '">' + f.label + ' <span class="tgt" id="t-' + f.id + '"></span></label>' +
+      '<div class="inwrap"><input type="number" inputmode="decimal" id="' + f.id + '" step="' + f.step + '"><span class="unit">' + f.unit + '</span></div>';
+    $("#g-" + f.g).appendChild(wrap);
+  });
+  const dDrain = document.createElement("div");
+  dDrain.className = "derived"; dDrain.id = "derivedDrain";
+  $("#g-drain").appendChild(dDrain);
+  const dEnv = document.createElement("div");
+  dEnv.className = "derived"; dEnv.id = "derivedEnv";
+  $("#g-env").appendChild(dEnv);
+
+  SYMPTOMS.forEach((s) => {
+    const l = document.createElement("label");
+    l.className = "chk";
+    l.innerHTML = '<input type="checkbox" id="' + s.id + '"><span>' + s.label + (s.sub ? "<small>" + s.sub + "</small>" : "") + "</span>";
+    $("#symptoms").appendChild(l);
+  });
+
+  // ---------- 초기값 ----------
+  const draft = store.get("cuke-draft");
+  function fillSample() {
+    FIELDS.forEach((f) => { $("#" + f.id).value = f.sample; });
+    SYMPTOMS.forEach((s) => { $("#" + s.id).checked = s.id === "s_mg"; });
+  }
+  if (draft && draft.values) {
+    FIELDS.forEach((f) => { if (draft.values[f.id] !== undefined) $("#" + f.id).value = draft.values[f.id]; });
+    SYMPTOMS.forEach((s) => { $("#" + s.id).checked = !!(draft.symptoms || []).includes(s.id); });
+    ["stage", "season", "system"].forEach((k) => { if (draft[k]) $("#" + k).value = draft[k]; });
+    $("#sampleBadge").hidden = !draft.isSample;
+  } else {
+    fillSample();
+  }
+  let isSample = draft ? !!draft.isSample : true;
+
+  // ---------- 판정 ----------
+  function num(id) {
+    const el = $("#" + id);
+    if (!el || el.closest(".field").hidden) return null;
+    const v = el.value.trim();
+    if (v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  function judge(v, r) {
+    if (v >= r.good[0] && v <= r.good[1]) return "good";
+    if (v >= r.warn[0] && v <= r.warn[1]) return "warn";
+    return "bad";
+  }
+  function fmtRange(r, unit) {
+    if (r.good[1] === 99) return r.good[0] + " 이상" + (unit ? " " + unit : "");
+    return r.good[0] + "–" + r.good[1] + (unit ? " " + unit : "");
+  }
+  function vpdCalc(t, rh) {
+    const svp = 0.6108 * Math.exp((17.27 * t) / (t + 237.3));
+    return svp * (1 - rh / 100);
+  }
+
+  function evaluate() {
+    const stage = $("#stage").value, season = $("#season").value, system = $("#system").value;
+    const T = targets(stage, season, system);
+
+    // 순환식이면 배액 관련 항목 숨김
+    FIELDS.forEach((f) => {
+      const el = $("#f-" + f.id);
+      el.hidden = (f.nonRecirc && T.recirc) || (f.recircOnly && !T.recirc);
+    });
+    $("#drainHint").textContent = T.recirc
+      ? "순환식은 배액률 대신 근권 온도와 양액 교체 주기로 판정합니다."
+      : "하루 누적 급액량과 배액량으로 배액률을 계산합니다.";
+
+    const v = {};
+    FIELDS.forEach((f) => { v[f.id] = num(f.id); });
+    const res = [];   // {key, cat, label, value, status, title, why, act}
+    const add = (o) => res.push(o);
+
+    // 목표 범위 표시
+    const showT = (id, txt) => { const el = $("#t-" + id); if (el) el.textContent = txt ? "적정 " + txt : ""; };
+    showT("ec", fmtRange(T.ec)); showT("ph", fmtRange(T.ph)); showT("solT", fmtRange(T.solT));
+    showT("dO", fmtRange(T.dO)); showT("drainEc", "급액+" + T.drainEcDiff.good[0] + "~" + T.drainEcDiff.good[1]);
+    showT("drainPh", fmtRange(T.drainPh)); showT("rootT", fmtRange(T.rootT)); showT("dayT", fmtRange(T.dayT));
+    showT("nightT", fmtRange(T.nightT)); showT("rh", fmtRange(T.rh)); showT("co2", fmtRange(T.co2));
+    showT("growth", T.growth ? fmtRange(T.growth) : ""); showT("stem", fmtRange(T.stem)); showT("tankDays", "14일 이내");
+    showT("supplyMl", ""); showT("drainMl", ""); showT("rad", ""); showT("fruitSet", "");
+
+    // --- 급액 EC
+    if (v.ec !== null) {
+      const s = judge(v.ec, T.ec);
+      const low = v.ec < T.ec.good[0];
+      add({ key: "ec", cat: "양액", label: "급액 EC", value: v.ec + " dS/m", status: s,
+        title: s === "good" ? "급액 EC 적정" : low ? "급액 EC가 낮음" : "급액 EC가 높음",
+        why: low ? "양분이 부족해 잎색이 옅어지고 과실 비대가 느려집니다." : "삼투압이 높아져 수분 흡수가 줄고, 칼슘 결핍과 순멎이를 부릅니다.",
+        act: low ? "원액 투입량을 늘려 " + T.ec.good[0] + "~" + T.ec.good[1] + " dS/m로 맞추세요." :
+          "원수 비율을 높여 " + T.ec.good[0] + "~" + T.ec.good[1] + " dS/m로 낮추세요. " + (season === "summer" ? "여름에는 낮게 유지합니다." : "") });
+      $("#f-ec").className = "field st-" + s;
+    } else $("#f-ec").className = "field";
+
+    // --- 급액 pH
+    if (v.ph !== null) {
+      const s = judge(v.ph, T.ph), low = v.ph < T.ph.good[0];
+      add({ key: "ph", cat: "양액", label: "급액 pH", value: String(v.ph), status: s,
+        title: s === "good" ? "급액 pH 적정" : low ? "급액 pH가 낮음" : "급액 pH가 높음",
+        why: low ? "pH 5.0 이하에서는 뿌리가 상하고 Ca·Mg 흡수가 줄어듭니다." : "pH 6.5 이상에서는 철·망간·인 흡수가 떨어집니다.",
+        act: low ? "산 투입량을 줄이거나 알칼리(수산화칼륨)로 5.5~6.0에 맞추세요." : "질산·인산 투입으로 5.5~6.0에 맞추세요. 원수 중탄산 농도도 확인하세요." });
+      $("#f-ph").className = "field st-" + s;
+    } else $("#f-ph").className = "field";
+
+    // --- 양액 온도
+    if (v.solT !== null) {
+      const s = judge(v.solT, T.solT), low = v.solT < T.solT.good[0];
+      add({ key: "solT", cat: "양액", label: "양액 온도", value: v.solT + " °C", status: s,
+        title: s === "good" ? "양액 온도 적정" : low ? "양액 온도가 낮음" : "양액 온도가 높음",
+        why: low ? "뿌리 활력과 인·질소 흡수가 떨어집니다." : "용존산소가 줄고 뿌리썩음병 위험이 커집니다.",
+        act: low ? "양액 탱크 가온(히터)을 설치하거나 탱크를 보온하세요." : "탱크 차광·지중 매설, 냉각기 사용으로 22°C 이하로 유지하세요." });
+      $("#f-solT").className = "field st-" + s;
+    } else $("#f-solT").className = "field";
+
+    // --- DO
+    if (v.dO !== null) {
+      const s = judge(v.dO, T.dO);
+      add({ key: "dO", cat: "양액", label: "용존산소", value: v.dO + " mg/L", status: s,
+        title: s === "good" ? "용존산소 충분" : "용존산소 부족",
+        why: "오이 뿌리는 산소 요구도가 높아 5mg/L 아래에서 활력이 크게 떨어집니다.",
+        act: "에어레이션·폭기를 강화하고, 양액 온도를 낮추세요." + (T.recirc ? " NFT는 베드 경사와 유량도 점검하세요." : "") });
+      $("#f-dO").className = "field st-" + s;
+    } else $("#f-dO").className = "field";
+
+    // --- 배액 (비순환)
+    let drainRatio = null;
+    const dd = [];
+    if (!T.recirc) {
+      if (v.drainEc !== null && v.ec !== null) {
+        const diff = round1(v.drainEc - v.ec);
+        const s = judge(diff, T.drainEcDiff);
+        dd.push("배액−급액 EC <b>" + (diff > 0 ? "+" : "") + diff.toFixed(1) + "</b>");
+        add({ key: "drainEc", cat: "근권", label: "배액 EC", value: v.drainEc + " dS/m (급액 대비 " + (diff > 0 ? "+" : "") + diff.toFixed(1) + ")", status: s,
+          title: s === "good" ? "근권 EC 안정" : diff > T.drainEcDiff.good[1] ? "근권에 염류가 쌓이는 중" : "배액 EC가 급액보다 낮음",
+          why: diff > T.drainEcDiff.good[1] ? "물보다 양분이 덜 흡수되어 슬래브 안 EC가 올라가고 있습니다. 시들음·칼슘 결핍의 원인이 됩니다." :
+            "양분 흡수가 왕성하거나 급액 EC가 부족합니다. 양분 결핍으로 이어질 수 있습니다.",
+          act: diff > T.drainEcDiff.good[1] ? "배액률을 5~10%p 올리거나 급액 EC를 0.2~0.3 낮추세요. 심하면 저EC 양액으로 슬래브를 세척하세요." :
+            "급액 EC를 0.2 정도 올리고 배액률이 지나치게 높지 않은지 확인하세요." });
+        $("#f-drainEc").className = "field st-" + s;
+      } else $("#f-drainEc").className = "field";
+
+      if (v.drainPh !== null) {
+        const s = judge(v.drainPh, T.drainPh), low = v.drainPh < T.drainPh.good[0];
+        add({ key: "drainPh", cat: "근권", label: "배액 pH", value: String(v.drainPh), status: s,
+          title: s === "good" ? "근권 pH 적정" : low ? "근권 pH가 낮음" : "근권 pH가 높음",
+          why: low ? "암모늄 흡수가 많거나 급액 pH가 낮습니다. 뿌리 손상 위험이 있습니다." : "질산 흡수가 활발해 근권이 알칼리화되고 있습니다. 철 결핍이 오기 쉽습니다.",
+          act: low ? "처방의 암모늄태 질소 비율을 줄이고 급액 pH를 5.8~6.0으로 올리세요." : "급액 pH를 0.2~0.3 낮추거나 암모늄태 질소 비율을 조금 높이세요." });
+        $("#f-drainPh").className = "field st-" + s;
+      } else $("#f-drainPh").className = "field";
+
+      if (v.supplyMl !== null && v.drainMl !== null && v.supplyMl > 0) {
+        drainRatio = Math.round((v.drainMl / v.supplyMl) * 100);
+        const s = judge(drainRatio, T.drainRatio), low = drainRatio < T.drainRatio.good[0];
+        dd.push("배액률 <b>" + drainRatio + "%</b>");
+        add({ key: "drainRatio", cat: "근권", label: "배액률", value: drainRatio + "%", status: s,
+          title: s === "good" ? "배액률 적정" : low ? "배액률이 낮음" : "배액률이 높음",
+          why: low ? "슬래브 세척이 안 되어 염류가 쌓이고, 오후 수분 부족이 생깁니다." : "양액이 낭비되고 근권이 과습해 뿌리 산소가 부족해집니다.",
+          act: low ? "1회 급액량을 늘리거나 급액 횟수를 늘려 " + fmtRange(T.drainRatio, "%") + "로 맞추세요." :
+            "급액 횟수를 줄이거나 일사 비례 급액 기준을 높여 " + fmtRange(T.drainRatio, "%") + "로 맞추세요." });
+        $("#f-drainMl").className = "field st-" + s;
+      } else $("#f-drainMl").className = "field";
+
+      if (v.supplyMl !== null && v.rad !== null && v.rad > 0 && T.water) {
+        const per1000 = (v.supplyMl / 1000) / (v.rad / 1000);
+        const s = judge(per1000, T.water);
+        dd.push("일사 1000J당 급액 <b>" + per1000.toFixed(1) + " L</b>");
+        add({ key: "water", cat: "근권", label: "일사량 대비 급액량", value: per1000.toFixed(1) + " L/주 (일사 1000J/cm²당)", status: s,
+          title: s === "good" ? "일사량에 맞는 급액량" : per1000 < T.water.good[0] ? "일사량에 비해 급액 부족" : "일사량에 비해 급액 과다",
+          why: "오이 수확기에는 일사 1000J/cm²당 1주에 대략 " + T.water.good[0] + "~" + T.water.good[1] + " L가 필요합니다(배액 포함 참고치).",
+          act: per1000 < T.water.good[0] ? "일사 비례 급액의 설정 일사량을 낮춰 급액 빈도를 높이세요." : "흐린 날 급액이 과하지 않은지, 타이머 급액을 일사 비례로 바꿀 수 있는지 확인하세요." });
+        $("#f-supplyMl").className = "field st-" + s;
+      } else $("#f-supplyMl").className = "field";
+    }
+
+    // --- 근권 온도
+    if (v.rootT !== null) {
+      const s = judge(v.rootT, T.rootT), low = v.rootT < T.rootT.good[0];
+      add({ key: "rootT", cat: "근권", label: "근권 온도", value: v.rootT + " °C", status: s,
+        title: s === "good" ? "근권 온도 적정" : low ? "근권 온도가 낮음" : "근권 온도가 높음",
+        why: low ? "16°C 아래에서는 뿌리 흡수가 급감해 오전 시들음과 인 결핍이 생깁니다." : "근권이 뜨거우면 호흡 소모와 뿌리썩음이 늘어납니다.",
+        act: low ? "슬래브 아래 온수 배관을 가동하거나 급액 양액을 데우세요." : "흰색 멀칭·차광, 급액 양액 냉각으로 22°C 이하로 유지하세요." });
+      $("#f-rootT").className = "field st-" + s;
+    } else $("#f-rootT").className = "field";
+
+    // --- 양액 교체 주기 (순환식)
+    if (T.recirc && v.tankDays !== null) {
+      const s = judge(v.tankDays, T.tankDays);
+      add({ key: "tankDays", cat: "근권", label: "양액 교체 경과일", value: v.tankDays + "일", status: s,
+        title: s === "good" ? "양액 교체 주기 적정" : "양액 교체가 늦어짐",
+        why: "순환 양액은 흡수되지 않는 Na·Cl과 성분 불균형이 쌓이고, 병원균이 퍼지기 쉽습니다.",
+        act: "2주 안팎으로 전량 교체하거나 성분 분석 후 보정하세요. UV·오존 등 살균 장치 사용을 권합니다." });
+      $("#f-tankDays").className = "field st-" + s;
+    } else if ($("#f-tankDays")) $("#f-tankDays").className = "field";
+
+    // --- 온도
+    if (v.dayT !== null) {
+      const s = judge(v.dayT, T.dayT), low = v.dayT < T.dayT.good[0];
+      add({ key: "dayT", cat: "환경", label: "주간 기온", value: v.dayT + " °C", status: s,
+        title: s === "good" ? "주간 기온 적정" : low ? "주간 기온이 낮음" : "주간 기온이 높음",
+        why: low ? "광합성과 생장 속도가 떨어집니다." : "30°C 이상에서는 호흡 소모가 커지고 꽃가루 활력과 과실 품질이 떨어집니다.",
+        act: low ? "환기 개시 온도를 26°C 이상으로 올리고 보온 커튼 개방 시간을 조정하세요." : "환기·차광·포그로 28°C 이하를 유지하세요." });
+      $("#f-dayT").className = "field st-" + s;
+    } else $("#f-dayT").className = "field";
+
+    if (v.nightT !== null) {
+      const s = judge(v.nightT, T.nightT), low = v.nightT < T.nightT.good[0];
+      add({ key: "nightT", cat: "환경", label: "야간 기온", value: v.nightT + " °C", status: s,
+        title: s === "good" ? "야간 기온 적정" : low ? "야간 기온이 낮음" : "야간 기온이 높음",
+        why: low ? "12~13°C 아래에서는 과실 비대가 멈추고 순멎이·기형과가 늘어납니다." : "야간이 따뜻하면 호흡으로 동화산물을 낭비해 초세가 웃자랍니다.",
+        act: low ? "난방 설정을 " + T.nightT.good[0] + "°C 이상으로 올리고 보온 커튼을 점검하세요." : "야간 난방 설정을 낮추고 일몰 후 변온 관리(전반야 높게, 후반야 낮게)를 적용하세요." });
+      $("#f-nightT").className = "field st-" + s;
+    } else $("#f-nightT").className = "field";
+
+    // --- 습도 / VPD
+    const de = [];
+    if (v.rh !== null) {
+      const s = judge(v.rh, T.rh), low = v.rh < T.rh.good[0];
+      add({ key: "rh", cat: "환경", label: "상대습도", value: v.rh + "%", status: s,
+        title: s === "good" ? "습도 적정" : low ? "공기가 건조함" : "습도가 높음",
+        why: low ? "기공이 닫혀 광합성이 줄고 흰가루병·응애가 늘어납니다." : "증산이 줄어 칼슘 결핍이 생기고 노균병·잿빛곰팡이병 위험이 커집니다.",
+        act: low ? "포그·미스트로 가습하고 한낮 환기를 줄이세요." : "순환팬을 돌리고, 야간 소량 환기와 난방을 함께 써서 결로를 막으세요." });
+      $("#f-rh").className = "field st-" + s;
+      if (v.dayT !== null) {
+        const vpd = vpdCalc(v.dayT, v.rh);
+        const sv = judge(vpd, T.vpd);
+        de.push("VPD <b>" + vpd.toFixed(2) + " kPa</b>");
+        add({ key: "vpd", cat: "환경", label: "수증기압차(VPD)", value: vpd.toFixed(2) + " kPa", status: sv,
+          title: sv === "good" ? "VPD 적정 (증산 원활)" : vpd < T.vpd.good[0] ? "VPD가 낮아 증산 부족" : "VPD가 높아 증산 과다",
+          why: "적정 VPD는 0.5~1.2 kPa입니다. 이 범위를 벗어나면 증산과 양분 이동이 흐트러집니다.",
+          act: vpd < T.vpd.good[0] ? "온도를 조금 올리거나 환기·제습으로 습도를 낮추세요." : "포그 가습과 차광으로 VPD를 낮추세요." });
+      }
+    } else $("#f-rh").className = "field";
+
+    if (v.co2 !== null) {
+      const s = judge(v.co2, T.co2), low = v.co2 < T.co2.good[0];
+      add({ key: "co2", cat: "환경", label: "CO₂", value: v.co2 + " ppm", status: s,
+        title: s === "good" ? "CO₂ 농도 적정" : low ? "CO₂가 부족함" : "CO₂ 과다",
+        why: low ? "밀폐 온실에서는 오전에 CO₂가 400ppm 아래로 떨어져 광합성이 제한됩니다." : "1500ppm 이상은 효과가 없고 잎 장해가 생길 수 있습니다.",
+        act: low ? "일출 후 환기 전까지 CO₂를 시용해 700~1000ppm을 유지하세요. 환기 중에는 400~500ppm 유지가 현실적입니다." : "시용량을 줄이세요." });
+      $("#f-co2").className = "field st-" + s;
+    } else $("#f-co2").className = "field";
+    if (v.rad !== null) de.push("일사량 <b>" + v.rad + " J/cm²</b>" + (v.rad < 800 ? " (흐린 날 수준)" : ""));
+
+    // --- 생육
+    if (v.growth !== null && T.growth) {
+      const s = judge(v.growth, T.growth), low = v.growth < T.growth.good[0];
+      add({ key: "growth", cat: "생육", label: "주간 생장 길이", value: v.growth + " cm", status: s,
+        title: s === "good" ? "생장 속도 적정" : low ? "생장이 느림 (초세 약화)" : "생장이 빠름 (웃자람)",
+        why: low ? "과다 착과, 저온, 근권 문제로 영양생장이 눌리고 있습니다." : "야간 고온·약광·저EC에서 웃자라기 쉽습니다.",
+        act: low ? "착과 수를 줄이고 야간 온도와 근권 상태를 점검하세요." : "야간 온도를 낮추고 EC를 0.2~0.3 올리세요." });
+      $("#f-growth").className = "field st-" + s;
+    } else $("#f-growth").className = "field";
+
+    if (v.stem !== null && stage !== "nursery") {
+      const s = judge(v.stem, T.stem), low = v.stem < T.stem.good[0];
+      add({ key: "stem", cat: "생육", label: "줄기 굵기", value: v.stem + " mm", status: s,
+        title: s === "good" ? "줄기 굵기 적정" : low ? "줄기가 가늘음" : "줄기가 너무 굵음",
+        why: low ? "생식생장 쪽으로 기울어 초세가 약해지는 신호입니다." : "영양생장 쪽으로 기울어 착과가 나빠질 수 있습니다.",
+        act: low ? "적과로 착과 부담을 줄이고 주야간 온도 차를 줄이세요." : "주야간 온도 차를 키우고 EC를 올리세요." });
+      $("#f-stem").className = "field st-" + s;
+    } else $("#f-stem").className = "field";
+
+    if (v.fruitSet !== null && stage === "harvest") {
+      const s = v.fruitSet <= 4 ? "good" : v.fruitSet <= 6 ? "warn" : "bad";
+      add({ key: "fruitSet", cat: "생육", label: "착과 수", value: v.fruitSet + "개/주", status: s,
+        title: s === "good" ? "착과 부담 적정" : "착과 부담이 큼",
+        why: "한 줄기에 비대 중인 과실이 너무 많으면 동화산물이 부족해 기형과·순멎이가 생깁니다.",
+        act: "약광기에는 3~4개, 강광기에도 5개 안팎으로 맞추도록 아래 마디부터 적과하세요." });
+      $("#f-fruitSet").className = "field st-" + s;
+    } else $("#f-fruitSet").className = "field";
+
+    $("#derivedDrain").innerHTML = dd.join(" · ");
+    $("#derivedEnv").innerHTML = de.join(" · ");
+
+    // --- 증상
+    const sym = SYMPTOMS.filter((s) => $("#" + s.id).checked);
+    sym.forEach((s) => {
+      let why = s.why;
+      // 측정값과 교차 확인
+      if (s.id === "s_fe" && v.drainPh !== null && v.drainPh > 6.5) why += " 현재 배액 pH " + v.drainPh + "로 높아 원인일 가능성이 큽니다.";
+      if (s.id === "s_ca" && v.rh !== null && v.rh > 85) why += " 현재 습도 " + v.rh + "%가 높습니다.";
+      if (s.id === "s_wilt" && v.drainEc !== null && v.ec !== null && v.drainEc - v.ec > 1.0) why += " 배액 EC가 급액보다 " + (v.drainEc - v.ec).toFixed(1) + " 높아 염류 장해가 의심됩니다.";
+      if (s.id === "s_root" && v.solT !== null && v.solT > 24) why += " 현재 양액 온도 " + v.solT + "°C가 높습니다.";
+      if (s.id === "s_stop" && v.nightT !== null && v.nightT < 15) why += " 현재 야간 기온 " + v.nightT + "°C가 낮습니다.";
+      if (s.id === "s_mg" && v.drainEc !== null && v.ec !== null && v.drainEc - v.ec > 1.0) why += " 근권 EC가 높아 Mg 흡수가 방해받고 있습니다.";
+      add({ key: s.id, cat: s.cat, label: "증상", value: s.label, status: s.w >= 7 ? "bad" : "warn", title: s.title, why, act: s.act, symptom: s.w });
+    });
+
+    return { T, res, stage, season, system, v, sym, drainRatio };
+  }
+
+  // ---------- 점수 ----------
+  function score(res) {
+    const meas = res.filter((r) => !r.symptom);
+    const val = { good: 1, warn: 0.4, bad: 0 };
+    const cats = ["양액", "근권", "환경", "생육"];
+    const catScores = {};
+    cats.forEach((c) => {
+      const items = meas.filter((r) => r.cat === c);
+      let sc = items.length ? (items.reduce((a, r) => a + val[r.status], 0) / items.length) * 100 : null;
+      const symPen = res.filter((r) => r.symptom && r.cat === c).reduce((a, r) => a + r.symptom * 1.5, 0);
+      if (sc === null && symPen) sc = 100;
+      if (sc !== null) sc = Math.max(0, sc - symPen);
+      catScores[c] = sc;
+    });
+    if (!meas.length && !res.length) return { total: null, catScores };
+    const base = meas.length ? (meas.reduce((a, r) => a + val[r.status], 0) / meas.length) * 100 : 100;
+    const pen = Math.min(35, res.filter((r) => r.symptom).reduce((a, r) => a + r.symptom, 0));
+    return { total: Math.max(0, Math.round(base - pen)), catScores };
+  }
+  function gradeOf(t) {
+    if (t === null) return { g: "–", c: "var(--muted)", v: "측정값을 입력하면 진단이 시작됩니다." };
+    if (t >= 85) return { g: "우수", c: "var(--good)", v: "기준 범위 안에서 잘 관리되고 있습니다. 지금 방식을 유지하세요." };
+    if (t >= 70) return { g: "양호", c: "var(--good)", v: "대체로 좋습니다. 주황색 항목만 다듬으면 수량이 더 오릅니다." };
+    if (t >= 50) return { g: "주의", c: "var(--warn)", v: "수량과 품질에 영향을 주는 항목이 있습니다. 아래 조치를 이번 주 안에 하세요." };
+    return { g: "위험", c: "var(--bad)", v: "작물이 스트레스를 받고 있습니다. 빨간 항목부터 바로 조치하세요." };
+  }
+
+  // ---------- 렌더 ----------
+  let last = null;
+  function render() {
+    const r = evaluate();
+    const sc = score(r.res);
+    const gr = gradeOf(sc.total);
+    last = { ...r, sc, gr };
+
+    $("#scoreNum").textContent = sc.total === null ? "–" : sc.total;
+    $("#ringArc").style.strokeDashoffset = 326.7 * (1 - (sc.total || 0) / 100);
+    $("#ringArc").setAttribute("stroke", gr.c);
+    $("#grade").textContent = gr.g;
+    $("#grade").style.color = gr.c;
+    $("#verdict").textContent = gr.v;
+    $("#mScore").textContent = sc.total === null ? "–" : sc.total;
+    $("#mGrade").textContent = gr.g;
+
+    $("#cats").innerHTML = Object.entries(sc.catScores).map(([c, s]) =>
+      '<div class="cat"><span>' + c + '</span><div class="bar"><i style="width:' + (s === null ? 0 : Math.round(s)) + "%;background:" +
+      (s === null ? "var(--line)" : s >= 70 ? "var(--good)" : s >= 50 ? "var(--warn)" : "var(--bad)") + '"></i></div><b>' + (s === null ? "–" : Math.round(s)) + "</b></div>").join("");
+
+    const n = { good: 0, warn: 0, bad: 0 };
+    r.res.forEach((x) => n[x.status]++);
+    $("#counts").innerHTML = '<span class="pill good">적정 ' + n.good + '</span><span class="pill warn">주의 ' + n.warn + '</span><span class="pill bad">위험 ' + n.bad + "</span>";
+
+    const order = { bad: 0, warn: 1, good: 2 };
+    const probs = r.res.filter((x) => x.status !== "good").sort((a, b) => order[a.status] - order[b.status] || (b.symptom || 0) - (a.symptom || 0));
+    const oks = r.res.filter((x) => x.status === "good");
+    $("#issueList").innerHTML = probs.length ? probs.map((x) =>
+      '<div class="issue ' + x.status + '"><div class="stripe"></div><div><h4>' + x.title + " <code>" + (x.symptom ? "관찰 증상" : x.label + " " + x.value) + "</code></h4>" +
+      '<p class="why">' + x.why + '</p><p class="act">' + x.act + "</p></div></div>").join("")
+      : '<p class="empty">' + (r.res.length ? "기준을 벗어난 항목이 없습니다." : "아직 입력된 측정값이 없습니다.") + "</p>";
+    $("#okWrap").hidden = !oks.length;
+    $("#okSummary").textContent = "적정 범위 항목 " + oks.length + "개 보기";
+    $("#okList").innerHTML = oks.map((x) => "<li>" + x.label + " " + x.value + "</li>").join("");
+
+    renderRef(r.T);
+    store.set("cuke-draft", snapshot());
+  }
+
+  function renderRef(T) {
+    const rows = [
+      ["급액 EC", fmtRange(T.ec, "dS/m")], ["급액 pH", fmtRange(T.ph)], ["양액 온도", fmtRange(T.solT, "°C")], ["용존산소", fmtRange(T.dO, "mg/L")]
+    ];
+    if (!T.recirc) rows.push(["배액 EC", "급액보다 +" + T.drainEcDiff.good[0] + "~" + T.drainEcDiff.good[1]], ["배액 pH", fmtRange(T.drainPh)], ["배액률", fmtRange(T.drainRatio, "%")]);
+    else rows.push(["양액 교체 주기", "14일 이내"]);
+    rows.push(["근권 온도", fmtRange(T.rootT, "°C")], ["주간 기온", fmtRange(T.dayT, "°C")], ["야간 기온", fmtRange(T.nightT, "°C")],
+      ["상대습도", fmtRange(T.rh, "%")], ["VPD", fmtRange(T.vpd, "kPa")], ["CO₂ (주간)", fmtRange(T.co2, "ppm")]);
+    if (T.growth) rows.push(["주간 생장 길이", fmtRange(T.growth, "cm")]);
+    rows.push(["줄기 굵기", fmtRange(T.stem, "mm")]);
+    $("#refTable").innerHTML = "<tr><th>항목</th><th>적정 범위</th><th>주의 한계</th></tr>" +
+      rows.map((r) => {
+        const key = r[0];
+        return "<tr><td>" + key + "</td><td>" + r[1] + "</td><td>" + warnText(key, T) + "</td></tr>";
+      }).join("");
+  }
+  function warnText(key, T) {
+    const map = { "급액 EC": T.ec, "급액 pH": T.ph, "양액 온도": T.solT, "배액 pH": T.drainPh, "배액률": T.drainRatio, "근권 온도": T.rootT,
+      "주간 기온": T.dayT, "야간 기온": T.nightT, "상대습도": T.rh, "VPD": T.vpd, "CO₂ (주간)": T.co2, "주간 생장 길이": T.growth, "줄기 굵기": T.stem };
+    const r = map[key];
+    if (key === "용존산소") return "5 미만 위험";
+    if (key === "배액 EC") return "+1.5 초과 위험";
+    if (key === "양액 교체 주기") return "21일 초과 위험";
+    if (!r) return "";
+    return round1(r.warn[0]) + "–" + round1(r.warn[1]);
+  }
+
+  function snapshot() {
+    const values = {};
+    FIELDS.forEach((f) => { values[f.id] = $("#" + f.id).value; });
+    return { values, symptoms: SYMPTOMS.filter((s) => $("#" + s.id).checked).map((s) => s.id),
+      stage: $("#stage").value, season: $("#season").value, system: $("#system").value, isSample };
+  }
+
+  // ---------- 기록 ----------
+  const STAGE_TXT = { nursery: "육묘기", early: "정식~착과", harvest: "수확기" };
+  function renderHistory() {
+    const h = store.get("cuke-history") || [];
+    $("#histEmpty").hidden = h.length > 0;
+    $("#histTable").hidden = h.length === 0;
+    if (!h.length) return;
+    $("#histTable").innerHTML = "<tr><th>날짜</th><th>단계</th><th>점수</th><th>판정</th><th>급액 EC</th><th>배액 EC</th><th>배액률</th><th></th></tr>" +
+      h.slice().reverse().map((e, i) => {
+        const idx = h.length - 1 - i;
+        return "<tr><td>" + e.date + "</td><td>" + (STAGE_TXT[e.stage] || "") + '</td><td class="n">' + e.score + "</td><td>" + e.grade +
+          '</td><td class="n">' + (e.ec ?? "–") + '</td><td class="n">' + (e.drainEc ?? "–") + '</td><td class="n">' + (e.drainRatio != null ? e.drainRatio + "%" : "–") +
+          '</td><td><button type="button" class="ghost" data-del="' + idx + '">삭제</button></td></tr>';
+      }).join("");
+  }
+  $("#histTable").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-del]");
+    if (!b) return;
+    const h = store.get("cuke-history") || [];
+    h.splice(Number(b.dataset.del), 1);
+    store.set("cuke-history", h);
+    renderHistory();
+  });
+
+  function toast(msg) { $("#toast").textContent = msg; clearTimeout(toast.t); toast.t = setTimeout(() => { $("#toast").textContent = ""; }, 3000); }
+
+  $("#saveBtn").addEventListener("click", () => {
+    if (!last || last.sc.total === null) { toast("측정값을 하나 이상 입력해야 기록할 수 있습니다."); return; }
+    const d = new Date();
+    const date = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const h = store.get("cuke-history") || [];
+    h.push({ date, stage: last.stage, score: last.sc.total, grade: last.gr.g, ec: last.v.ec, drainEc: last.v.drainEc, drainRatio: last.drainRatio });
+    const ok = store.set("cuke-history", h.slice(-60));
+    renderHistory();
+    toast(ok ? date + " 진단을 기록했습니다." : "이 브라우저에서는 기록을 저장할 수 없습니다.");
+  });
+
+  $("#copyBtn").addEventListener("click", () => {
+    if (!last) return;
+    const lines = ["[오이 양액재배 진단] " + new Date().toLocaleDateString("ko-KR"),
+      "조건: " + $("#stage").selectedOptions[0].text + " / " + $("#season").selectedOptions[0].text + " / " + $("#system").selectedOptions[0].text,
+      "점수: " + (last.sc.total ?? "–") + "점 (" + last.gr.g + ")", ""];
+    const order = { bad: 0, warn: 1, good: 2 };
+    last.res.slice().sort((a, b) => order[a.status] - order[b.status]).forEach((x) => {
+      const mark = x.status === "bad" ? "■ 위험" : x.status === "warn" ? "□ 주의" : "○ 적정";
+      lines.push(mark + " " + x.title + (x.symptom ? "" : " (" + x.value + ")"));
+      if (x.status !== "good") lines.push("   → " + x.act);
+    });
+    const text = lines.join("\n");
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); toast("진단 결과를 복사했습니다."); } catch (e) { toast("복사하지 못했습니다. 화면 내용을 직접 선택해 주세요."); }
+      ta.remove();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => toast("진단 결과를 복사했습니다."), fallback);
+    } else fallback();
+  });
+
+  $("#clearBtn").addEventListener("click", () => {
+    FIELDS.forEach((f) => { $("#" + f.id).value = ""; });
+    SYMPTOMS.forEach((s) => { $("#" + s.id).checked = false; });
+    isSample = false; $("#sampleBadge").hidden = true;
+    render();
+  });
+
+  $("#form").addEventListener("input", (e) => {
+    if (isSample && e.target.matches("input")) { isSample = false; $("#sampleBadge").hidden = true; }
+    render();
+  });
+  $("#form").addEventListener("change", render);
+  $("#form").addEventListener("submit", (e) => e.preventDefault());
+
+  render();
+  renderHistory();
+})();
+</script>
+<!--BODY-END-->
+</body>
+</html>
